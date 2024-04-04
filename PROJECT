@@ -7,4 +7,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: multi-cluster-leader-election
 repo: github.com/600lyy/multi-cluster-leader-election
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: 600lyy.io
+  group: leaderelection
+  kind: Lease
+  path: github.com/600lyy/multi-cluster-leader-election/api/v1
+  version: v1
 version: "3"
