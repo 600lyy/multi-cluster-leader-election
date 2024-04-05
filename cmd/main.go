@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -53,14 +54,31 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var leaseDuration int64
+	var renewDeadline int64
+	var retryPeriod int64
+	var leaderElectionReleaseOnCancel bool
+	var leaseBucket string
+	var projectId string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.Int64Var(&leaseDuration, "lease-duration", 15,
+		"LeaseDuration is the duration that non-leader candidates will wait to force acquire leadership. ")
+	flag.Int64Var(&renewDeadline, "renew-deadline", 10,
+		"RenewDeadline is the duration that the acting controlplane will retry refreshing leadership before giving up. ")
+	flag.Int64Var(&retryPeriod, "retry-period", 4,
+		"RetryPeriod is the duration the LeaderElector clients should wait between tries of actions. ")
+	flag.BoolVar(&leaderElectionReleaseOnCancel, "leader-release-on-cancel", false,
+		"LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily when the Manager ends. ")
+	flag.StringVar(&leaseBucket, "lease-storage-bucket", "", "The Google Clous Storage bucket that holds the lease.")
+	flag.StringVar(&projectId, "project-id", "", "Google project ID to which the bucke belong")
 	opts := zap.Options{
 		Development: true,
 	}
+	klog.InitFlags(nil)
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 

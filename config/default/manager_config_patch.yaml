@@ -8,3 +8,9 @@ spec:
     spec:
       containers:
       - name: manager
+        args:
+        - "--lease-duration=60"
+        - "--renew-deadline=40"
+        - "--retry-period=16"
+        - "--lease-storage-bucket=declarative-platform-001"
+        - "--project-id=k8s-lab-322711"
