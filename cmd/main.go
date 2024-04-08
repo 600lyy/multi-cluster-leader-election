@@ -19,11 +19,13 @@ package main
 import (
 	"flag"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"cloud.google.com/go/storage"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -35,6 +37,8 @@ import (
 
 	leaderelectionv1 "github.com/600lyy/multi-cluster-leader-election/api/v1"
 	"github.com/600lyy/multi-cluster-leader-election/internal/controller"
+	"github.com/600lyy/multi-cluster-leader-election/pkg/leaderelection"
+	"github.com/600lyy/multi-cluster-leader-election/pkg/resourcelock"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -57,9 +61,9 @@ func main() {
 	var leaseDuration int64
 	var renewDeadline int64
 	var retryPeriod int64
-	var leaderElectionReleaseOnCancel bool
-	var leaseBucket string
 	var projectId string
+	var leaseBucket string
+	var leaseFile string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
@@ -71,10 +75,9 @@ func main() {
 		"RenewDeadline is the duration that the acting controlplane will retry refreshing leadership before giving up. ")
 	flag.Int64Var(&retryPeriod, "retry-period", 4,
 		"RetryPeriod is the duration the LeaderElector clients should wait between tries of actions. ")
-	flag.BoolVar(&leaderElectionReleaseOnCancel, "leader-release-on-cancel", false,
-		"LeaderElectionReleaseOnCancel defines if the leader should step down voluntarily when the Manager ends. ")
-	flag.StringVar(&leaseBucket, "lease-storage-bucket", "", "The Google Clous Storage bucket that holds the lease.")
 	flag.StringVar(&projectId, "project-id", "", "Google project ID to which the bucke belong")
+	flag.StringVar(&leaseBucket, "lease-storage-bucket", "", "The Google Clous Storage bucket that holds the lease.")
+	flag.StringVar(&leaseFile, "lease-file", "", "The file name of the lease in the storage bucket")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -83,6 +86,10 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	duration := time.Duration(leaseDuration) * time.Second
+	retry := time.Duration(retryPeriod) * time.Second
+	renew := time.Duration(renewDeadline) * time.Second
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -107,9 +114,32 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := ctrl.SetupSignalHandler()
+
+	setupLog.Info("setting up the storage client")
+	gscClient, err := storage.NewClient(ctx)
+	if err != nil {
+		setupLog.Error(err, "unable to start the Google cloud storage client")
+	}
+
+	setupLog.Info("setting up leader election")
+	resourceLock := &resourcelock.LeaseLock{
+		Client:     gscClient,
+		BucketName: leaseBucket,
+		ProjectId:  projectId,
+	}
+	l, err := leaderelection.NewLeaderElector(leaderelection.LeaderElectionConfig{
+		Lock:          resourceLock,
+		LeaseDuration: duration,
+		RenewDeadline: renew,
+		RetryPeriod:   retry,
+		Name:          "b4973361.600lyy.io",
+	})
+
 	if err = (&controller.LeaseReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:        mgr.GetClient(),
+		Scheme:        mgr.GetScheme(),
+		LeaderElector: l,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Lease")
 		os.Exit(1)
@@ -126,7 +156,7 @@ func main() {
 	}
 
 	setupLog.Info("starting manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}

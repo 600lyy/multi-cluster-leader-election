@@ -26,34 +26,27 @@ import (
 // LeaseSpec defines the desired state of Lease
 type LeaseSpec struct {
 	// holderIdentity contains the identity of the holder of a current lease.
-	// +optional
-	HolderIdentity *string `json:"holderIdentity,omitempty" protobuf:"bytes,1,opt,name=holderIdentity"`
+	HolderIdentity string `json:"holderIdentity" protobuf:"bytes,1,opt,name=holderIdentity"`
 	// leaseDurationSeconds is a duration that candidates for a lease need
 	// to wait to force acquire it. This is measure against time of last
 	// observed renewTime.
-	// +optional
-	LeaseDurationSeconds *int32 `json:"leaseDurationSeconds,omitempty" protobuf:"varint,2,opt,name=leaseDurationSeconds"`
+	LeaseDurationSeconds int32 `json:"leaseDurationSeconds" protobuf:"varint,2,opt,name=leaseDurationSeconds"`
 	// acquireTime is a time when the current lease was acquired.
-	// +optional
-	AcquireTime *metav1.MicroTime `json:"acquireTime,omitempty" protobuf:"bytes,3,opt,name=acquireTime"`
+	AcquireTime metav1.MicroTime `json:"acquireTime" protobuf:"bytes,3,opt,name=acquireTime"`
 	// renewTime is a time when the current holder of a lease has last
 	// updated the lease.
-	// +optional
-	RenewTime *metav1.MicroTime `json:"renewTime,omitempty" protobuf:"bytes,4,opt,name=renewTime"`
-	// leaseTransitions is the number of transitions of a lease between
-	// holders.
-	// +optional
-	LeaseTransitions *int32 `json:"leaseTransitions,omitempty" protobuf:"varint,5,opt,name=leaseTransitions"`
+	RenewTime metav1.MicroTime `json:"renewTime" protobuf:"bytes,4,opt,name=renewTime"`
 }
 
 // LeaseStatus defines the observed state of Lease
 type LeaseStatus struct {
 	// observedholderIdentity contains the identity of the holder of a current lease.
-	// +optional
-	ObservedHolderIdentity *string `json:"observedHolderIdentity,omitempty" protobuf:"bytes,1,opt,name=observedHolderIdentity"`
+	ObservedHolderIdentity string `json:"observedHolderIdentity" protobuf:"bytes,1,opt,name=observedHolderIdentity"`
 	// observedAcquireTime is a time when the current lease was acquired.
-	// +optional
-	ObservedAcquireTime *metav1.MicroTime `json:"observedAcquireTime,omitempty" protobuf:"bytes,3,opt,name=observedAcquireTime"`
+	ObservedAcquireTime metav1.MicroTime `json:"observedAcquireTime" protobuf:"bytes,3,opt,name=observedAcquireTime"`
+	// leaseTransitions is the number of transitions of a lease between
+	// holders.
+	LeaseTransitions int32 `json:"leaseTransitions" protobuf:"varint,5,opt,name=leaseTransitions"`
 }
 
 //+kubebuilder:object:root=true

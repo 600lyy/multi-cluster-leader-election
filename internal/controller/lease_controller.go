@@ -18,24 +18,38 @@ package controller
 
 import (
 	"context"
+	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	leaderelectionv1 "github.com/600lyy/multi-cluster-leader-election/api/v1"
+	"github.com/600lyy/multi-cluster-leader-election/pkg/leaderelection"
+	"github.com/600lyy/multi-cluster-leader-election/pkg/resourcelock"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+)
+
+var (
+	leaseOperatorAnnotation = "leaderelection.600lyy.io/lease-operator"
+	finalizerName           = "leaderelection.600lyy.io/finalizer"
 )
 
 // LeaseReconciler reconciles a Lease object
 type LeaseReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	Scheme        *runtime.Scheme
+	LeaderElector *leaderelection.LeaderElector
 }
 
 //+kubebuilder:rbac:groups=leaderelection.600lyy.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=leaderelection.600lyy.io,resources=leases/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=leaderelection.600lyy.io,resources=leases/finalizers,verbs=update
+//+kubebuilder:rbac:groups="",resources=namespaces,verbs=*
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -47,9 +61,65 @@ type LeaseReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.16.3/pkg/reconcile
 func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	log := log.FromContext(ctx)
+	log.Info("reconciling multi-cluster lease")
 
-	// TODO(user): your logic here
+	namespaceObj := &corev1.Namespace{}
+	err := r.Get(ctx, req.NamespacedName, namespaceObj)
+	if err != nil {
+		log.Error(err, "namespace not found", "namespace", req.NamespacedName.Name)
+		return ctrl.Result{}, client.IgnoreNotFound(err)
+	}
+
+	// When user attempts to delete a resource, the API server handling the delete
+	// request notices the values in the "finalizer" field and add a metadata.deletionTimestamp
+	// field with time user started the deleteion. This field indicates the deletion of the object
+	// has been requested, but the deletion will not be complete until all the finailzers are removed.
+	// For more details, check Finalizer and Deletion:
+	// - https://kubernetes.io/blog/2021/05/14/using-finalizers-to-control-deletion/
+	if namespaceObj.ObjectMeta.DeletionTimestamp.IsZero() {
+		// Add a finalizer if not present to delete its lease object
+		if !controllerutil.ContainsFinalizer(namespaceObj, finalizerName) {
+			log.Info("adding finalizer to the namespace", "namespace", namespaceObj.Name)
+			namespaceObj.ObjectMeta.Finalizers = append(namespaceObj.ObjectMeta.Finalizers, finalizerName)
+			if err := r.Update(ctx, namespaceObj); err != nil {
+				log.Error(err, "unable to update namespace", "namespace", namespaceObj.Name)
+				return ctrl.Result{}, err
+			}
+		}
+		// Attempt to fetch lease, creat a new one if not present
+		lease := &leaderelectionv1.Lease{}
+		err := r.Get(ctx, client.ObjectKey{Name: namespaceObj.Name}, lease)
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				now := metav1.NewTime(r.LeaderElector.Clock.Now())
+				ler := &resourcelock.LeaderElectionRecord{
+					HolderIdentity:       r.LeaderElector.Config.Lock.Identity(),
+					LeaseDurationSeconds: int(r.LeaderElector.Config.LeaseDuration / time.Second),
+					AcquireTime:          now,
+					RenewTime:            now,
+				}
+				lease = &leaderelectionv1.Lease{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: namespaceObj.Name,
+						Name:      "lease-gsc",
+						Annotations: map[string]string{
+							"managed-by": leaseOperatorAnnotation,
+						},
+					},
+					Spec: resourcelock.LeaderElectionRecordToLeaseSpec(ler),
+				}
+				if err = r.Create(ctx, lease); err != nil {
+					log.Error(err, "failed to create lease for namespace", "ns", namespaceObj.Name)
+					return ctrl.Result{}, err
+				}
+
+			} else {
+				log.Error(err, "unable to fetch the lease for namespace", "ns", namespaceObj.Name)
+				return ctrl.Result{}, err
+			}
+		}
+	}
 
 	return ctrl.Result{}, nil
 }

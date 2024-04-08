@@ -5,4 +5,4 @@ kind: Kustomization
 images:
 - name: controller
   newName: gcr.io/k8s-lab-322711/multi-cluster-leader-election-controller
-  newTag: c82acd2
+  newTag: 62f64a7

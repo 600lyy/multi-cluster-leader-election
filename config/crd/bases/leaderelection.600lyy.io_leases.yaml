@@ -48,20 +48,25 @@ spec:
                   time of last observed renewTime.
                 format: int32
                 type: integer
-              leaseTransitions:
-                description: leaseTransitions is the number of transitions of a lease
-                  between holders.
-                format: int32
-                type: integer
               renewTime:
                 description: renewTime is a time when the current holder of a lease
                   has last updated the lease.
                 format: date-time
                 type: string
+            required:
+            - acquireTime
+            - holderIdentity
+            - leaseDurationSeconds
+            - renewTime
             type: object
           status:
             description: LeaseStatus defines the observed state of Lease
             properties:
+              leaseTransitions:
+                description: leaseTransitions is the number of transitions of a lease
+                  between holders.
+                format: int32
+                type: integer
               observedAcquireTime:
                 description: observedAcquireTime is a time when the current lease
                   was acquired.
@@ -71,6 +76,10 @@ spec:
                 description: observedholderIdentity contains the identity of the holder
                   of a current lease.
                 type: string
+            required:
+            - leaseTransitions
+            - observedAcquireTime
+            - observedHolderIdentity
             type: object
         type: object
     served: true
