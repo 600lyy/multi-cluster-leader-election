@@ -49,7 +49,7 @@ func (ll *LeaseLock) Get(ctx context.Context) (*LeaderElectionRecord, []byte, er
 	if gcsErr = json.Unmarshal(recordByte[:len], &record); gcsErr != nil {
 		return nil, nil, ll.convertGcsErrToLeaseErr(gcsErr)
 	}
-	klog.V(5).Infof("The candidate %v reads %d bytes from [%v/%v] in Google storage", ll.LockConfig.Identity, len, ll.BucketName, ll.LeaseFile)
+	klog.Infof("The candidate %v reads %d bytes from [%v/%v] in Google storage", ll.LockConfig.Identity, len, ll.BucketName, ll.LeaseFile)
 	return &record, recordByte, nil
 }
 
@@ -69,7 +69,7 @@ func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error
 	if err != nil {
 		return err
 	}
-	klog.V(5).Infof("Succesfully connected to the bucket [%v] in Google storage", attr.Name)
+	klog.Infof("Succesfully connected to the bucket [%v] in Google storage", attr.Name)
 
 	wc := bkt.Object(ll.LeaseFile).NewWriter(ctx)
 	writeByte, err := json.Marshal(ler)
@@ -82,7 +82,7 @@ func (ll *LeaseLock) Create(ctx context.Context, ler LeaderElectionRecord) error
 	if err = wc.Close(); err != nil {
 		return err
 	}
-	klog.V(5).Infof("Create lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, attr.Name, wc.ObjectAttrs.Name)
+	klog.Infof("Create lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, attr.Name, wc.ObjectAttrs.Name)
 	return nil
 }
 
@@ -106,7 +106,7 @@ func (ll *LeaseLock) Update(ctx context.Context, ler LeaderElectionRecord) error
 	if err = wc.Close(); err != nil {
 		return err
 	}
-	klog.V(5).Infof("Update lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, ll.BucketName, wc.ObjectAttrs.Name)
+	klog.Infof("Update lease: Succesfully write [%d] bytes to the lease [%v/%v] in Google storage", len, ll.BucketName, wc.ObjectAttrs.Name)
 	return nil
 }
 
@@ -148,5 +148,13 @@ func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) leaderelectionv1
 		LeaseDurationSeconds: leaseDurationSeconds,
 		AcquireTime:          metav1.MicroTime{Time: ler.AcquireTime.Time},
 		RenewTime:            metav1.MicroTime{Time: ler.RenewTime.Time},
+	}
+}
+
+func LeaderElectionRecordToLeaseStatus(ler *LeaderElectionRecord) leaderelectionv1.LeaseStatus {
+	return leaderelectionv1.LeaseStatus{
+		ObservedHolderIdentity: ler.HolderIdentity,
+		ObservedAcquireTime:    metav1.MicroTime(ler.AcquireTime),
+		LeaseTransitions:       int32(ler.LeaderTransitions),
 	}
 }

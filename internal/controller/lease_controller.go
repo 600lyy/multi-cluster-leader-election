@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	leaderelectionv1 "github.com/600lyy/multi-cluster-leader-election/api/v1"
+	"github.com/600lyy/multi-cluster-leader-election/pkg/jitter"
 	"github.com/600lyy/multi-cluster-leader-election/pkg/leaderelection"
 	"github.com/600lyy/multi-cluster-leader-election/pkg/resourcelock"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -39,7 +40,23 @@ var (
 	finalizerName           = "leaderelection.600lyy.io/finalizer"
 )
 
+var (
+	ignoredNamespaces = []string{
+		"cert-manager",
+		"cnrm-system",
+		"gke-managed-cim",
+		"gmp-public",
+		"gmp-system",
+		"kube-node-lease",
+		"kube-public",
+		"multi-cluster-leader-election-system",
+		"ssa-demo",
+		"kube-system",
+	}
+)
+
 // LeaseReconciler reconciles a Lease object
+// LeaseReconciler watches namespace objects
 type LeaseReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
@@ -71,6 +88,10 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
+	if isIgnoredNamespace(namespaceObj.Name) {
+		log.Info("ingore system managed namespaces", "namespace", namespaceObj.Name)
+		return ctrl.Result{}, nil
+	}
 	// When user attempts to delete a resource, the API server handling the delete
 	// request notices the values in the "finalizer" field and add a metadata.deletionTimestamp
 	// field with time user started the deleteion. This field indicates the deletion of the object
@@ -94,7 +115,7 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 			if apierrors.IsNotFound(err) {
 				now := metav1.NewTime(r.LeaderElector.Clock.Now())
 				ler := &resourcelock.LeaderElectionRecord{
-					HolderIdentity:       r.LeaderElector.Config.Lock.Identity(),
+					HolderIdentity:       "Unknown",
 					LeaseDurationSeconds: int(r.LeaderElector.Config.LeaseDuration / time.Second),
 					AcquireTime:          now,
 					RenewTime:            now,
@@ -109,13 +130,58 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 					},
 					Spec: resourcelock.LeaderElectionRecordToLeaseSpec(ler),
 				}
+				// Create a lease object for the namespace, but hold off to create the lease
+				// in the google storage bucket until next reconcile
 				if err = r.Create(ctx, lease); err != nil {
-					log.Error(err, "failed to create lease for namespace", "ns", namespaceObj.Name)
+					log.Error(err, "failed to create the lease object for namespace", "ns", namespaceObj.Name)
 					return ctrl.Result{}, err
 				}
-
 			} else {
-				log.Error(err, "unable to fetch the lease for namespace", "ns", namespaceObj.Name)
+				log.Error(err, "unable to fetch the lease object for namespace", "ns", namespaceObj.Name)
+				return ctrl.Result{}, err
+			}
+		} else {
+			// hanlde update or reconcile
+			cctx, cancel := context.WithCancel(ctx)
+			defer cancel()
+			if err = r.LeaderElector.TryAcquireOrRenew(cctx); err != nil {
+				log.Error(err, "unbale to acquire or renew the lease file in storage bucket")
+				return ctrl.Result{}, err
+			}
+			// lease.Spec.HolderIdentity = r.LeaderElector.GetLeader()
+			// update lease status
+			lease.Status = resourcelock.LeaderElectionRecordToLeaseStatus(&r.LeaderElector.ObservedRecord)
+			if err = r.Status().Update(ctx, lease); err != nil {
+				log.Error(err, "unable to update lease status")
+				return ctrl.Result{}, err
+			}
+		}
+		if reconcileReenqueuePeriod, err := jitter.GenerateJitterReenqueuePeriod(lease); err != nil {
+			return ctrl.Result{}, err
+		} else {
+			log.Info("successully finished reconcile", "lease", lease.Name, "time to next reconcile", reconcileReenqueuePeriod)
+			return ctrl.Result{RequeueAfter: reconcileReenqueuePeriod}, nil
+		}
+	} else {
+		// hanlde delete
+		if controllerutil.ContainsFinalizer(namespaceObj, finalizerName) {
+			log.Info("finalizer found, deleting the lease object for namespace")
+			lease := &leaderelectionv1.Lease{}
+			if err := r.Get(ctx, client.ObjectKey{Name: namespaceObj.Name}, lease); err != nil {
+				log.Error(err, "unable to fetch the lease object for namespace", "ns", namespaceObj.Name)
+				return ctrl.Result{}, err
+			}
+
+			if err := r.Delete(ctx, lease); err != nil {
+				log.Error(err, "unable to delete the lease for namespace", "namespace", namespaceObj.Name)
+				return ctrl.Result{}, err
+			}
+			log.Info("Lease for the namespace deleted", "namespace", namespaceObj.Name)
+
+			// Remove the finalizer and udpate the namespace object
+			controllerutil.RemoveFinalizer(namespaceObj, finalizerName)
+			if err := r.Update(ctx, namespaceObj); err != nil {
+				log.Error(err, "Unable to remove finalizer and update namespace", "namespace", namespaceObj.Name)
 				return ctrl.Result{}, err
 			}
 		}
@@ -127,6 +193,15 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 // SetupWithManager sets up the controller with the Manager.
 func (r *LeaseReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&leaderelectionv1.Lease{}).
+		For(&corev1.Namespace{}).
 		Complete(r)
+}
+
+func isIgnoredNamespace(namespace string) bool {
+	for _, ns := range ignoredNamespaces {
+		if namespace == ns {
+			return true
+		}
+	}
+	return false
 }

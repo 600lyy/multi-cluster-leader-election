@@ -1,11 +1,16 @@
 package leaderelection
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	rl "github.com/600lyy/multi-cluster-leader-election/pkg/resourcelock"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
 )
 
@@ -89,4 +94,85 @@ type LeaderElector struct {
 	Clock clock.Clock
 	// used to lock the observedRecord
 	ObservedRecordLock sync.Mutex
+}
+
+// GetLeader returns the identity of the last observed leader or returns the empty string if
+// no leader has yet been observed.
+// This function is for informational purposes. (e.g. monitoring, logs, etc.)
+func (le *LeaderElector) GetLeader() string {
+	return le.getObservedRecord().HolderIdentity
+}
+
+func (le *LeaderElector) getObservedRecord() rl.LeaderElectionRecord {
+	le.ObservedRecordLock.Lock()
+	defer le.ObservedRecordLock.Unlock()
+
+	return le.ObservedRecord
+}
+
+func (le *LeaderElector) TryAcquireOrRenew(ctx context.Context) error {
+	now := metav1.NewTime(le.Clock.Now())
+	leaderElectionRecord := rl.LeaderElectionRecord{
+		HolderIdentity:       le.Config.Lock.Identity(),
+		LeaseDurationSeconds: int(le.Config.LeaseDuration / time.Second),
+		RenewTime:            now,
+		AcquireTime:          now,
+	}
+	// 1. obtain or create the ElectionRecord
+	oldLeaderElectionRecord, oldLeaderElectionRawRecord, err := le.Config.Lock.Get(ctx)
+	if err != nil {
+		if !apierrors.IsNotFound(err) {
+			klog.Errorf("error retrieving resource lock %v: %v", le.Config.Lock.Describe(), err)
+			return err
+		}
+		if err = le.Config.Lock.Create(ctx, leaderElectionRecord); err != nil {
+			klog.Errorf("error initially creating leader election record: %v", err)
+			return err
+		}
+
+		le.setObservedRecord(&leaderElectionRecord)
+		return nil
+	}
+
+	// 2. Record obtained, check the Identity & Time
+	if !bytes.Equal(le.ObservedRawRecord, oldLeaderElectionRawRecord) {
+		le.setObservedRecord(oldLeaderElectionRecord)
+		le.ObservedRawRecord = oldLeaderElectionRawRecord
+	}
+	if len(oldLeaderElectionRecord.HolderIdentity) > 0 &&
+		le.ObservedTime.Add(time.Second*time.Duration(oldLeaderElectionRecord.LeaseDurationSeconds)).After(now.Time) &&
+		!le.IsLeader() {
+		klog.Infof("lock is held by %v and has not yet expired", oldLeaderElectionRecord.HolderIdentity)
+		return nil
+	}
+
+	// 3. We're going to try to update. The leaderElectionRecord is set to it's default
+	// here. Let's correct it before updating.
+	if le.IsLeader() {
+		leaderElectionRecord.AcquireTime = oldLeaderElectionRecord.AcquireTime
+		leaderElectionRecord.LeaderTransitions = oldLeaderElectionRecord.LeaderTransitions
+	} else {
+		leaderElectionRecord.LeaderTransitions = oldLeaderElectionRecord.LeaderTransitions + 1
+	}
+
+	// update the lock itself
+	if err = le.Config.Lock.Update(ctx, leaderElectionRecord); err != nil {
+		klog.Errorf("failed to update lock: %v", err)
+		return err
+	}
+
+	le.setObservedRecord(&leaderElectionRecord)
+	return nil
+}
+
+func (le *LeaderElector) setObservedRecord(observedRecord *rl.LeaderElectionRecord) {
+	le.ObservedRecordLock.Lock()
+	defer le.ObservedRecordLock.Unlock()
+
+	le.ObservedRecord = *observedRecord
+	le.ObservedTime = le.Clock.Now()
+}
+
+func (le *LeaderElector) IsLeader() bool {
+	return (le.getObservedRecord().HolderIdentity == le.Config.Lock.Identity())
 }
