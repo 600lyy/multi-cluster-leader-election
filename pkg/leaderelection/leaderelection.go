@@ -75,8 +75,6 @@ type LeaderElectionConfig struct {
 	//
 	// Core clients default this value to 2 seconds.
 	RetryPeriod time.Duration
-	// Name is the name of the resource lock for debugging
-	Name string
 }
 
 // LeaderElector is a leader election client.

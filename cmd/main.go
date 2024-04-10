@@ -133,12 +133,17 @@ func main() {
 		LeaseDuration: duration,
 		RenewDeadline: renew,
 		RetryPeriod:   retry,
-		Name:          "b4973361.600lyy.io",
 	})
+
+	if err != nil {
+		setupLog.Error(err, "failed to enable leader election")
+		os.Exit(1)
+	}
 
 	if err = (&controller.LeaseReconciler{
 		Client:        mgr.GetClient(),
 		Scheme:        mgr.GetScheme(),
+		Identify:      mgr.GetConfig().Host,
 		LeaderElector: l,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Lease")

@@ -49,6 +49,7 @@ type LeaseReconciler struct {
 	client.Client
 	Scheme        *runtime.Scheme
 	LeaderElector *leaderelection.LeaderElector
+	Identify      string
 }
 
 //+kubebuilder:rbac:groups=leaderelection.600lyy.io,resources=leases,verbs=get;list;watch;create;update;patch;delete
@@ -79,7 +80,7 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// Create a lease object for the namespace if not present
 		// Hold off to create a lease in the storage bucket until next reconcile
 		ler := &resourcelock.LeaderElectionRecord{
-			HolderIdentity:       "Unknown",
+			HolderIdentity:       r.Identify,
 			LeaseDurationSeconds: int(r.LeaderElector.Config.LeaseDuration / time.Second),
 		}
 		lease = &leaderelectionv1.Lease{
@@ -101,6 +102,8 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 		// reconcile to acquire or renew the lesase in storage bucket
 		cctx, cancel := context.WithCancel(ctx)
 		defer cancel()
+
+		r.LeaderElector.Config.Lock.(*resourcelock.LeaseLock).LockConfig.Identity = r.Identify
 		r.LeaderElector.Config.Lock.(*resourcelock.LeaseLock).LeaseFile = namespaceName + "-" + leaseName
 		if err = r.LeaderElector.TryAcquireOrRenew(cctx); err != nil {
 			logger.Error(err, "unable to acquire or renew the lease file in storage bucket")
