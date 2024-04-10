@@ -146,8 +146,6 @@ func LeaderElectionRecordToLeaseSpec(ler *LeaderElectionRecord) leaderelectionv1
 	return leaderelectionv1.LeaseSpec{
 		HolderIdentity:       ler.HolderIdentity,
 		LeaseDurationSeconds: leaseDurationSeconds,
-		AcquireTime:          metav1.MicroTime{Time: ler.AcquireTime.Time},
-		RenewTime:            metav1.MicroTime{Time: ler.RenewTime.Time},
 	}
 }
 

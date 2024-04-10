@@ -34,10 +34,6 @@ spec:
           spec:
             description: LeaseSpec defines the desired state of Lease
             properties:
-              acquireTime:
-                description: acquireTime is a time when the current lease was acquired.
-                format: date-time
-                type: string
               holderIdentity:
                 description: holderIdentity contains the identity of the holder of
                   a current lease.
@@ -48,16 +44,9 @@ spec:
                   time of last observed renewTime.
                 format: int32
                 type: integer
-              renewTime:
-                description: renewTime is a time when the current holder of a lease
-                  has last updated the lease.
-                format: date-time
-                type: string
             required:
-            - acquireTime
             - holderIdentity
             - leaseDurationSeconds
-            - renewTime
             type: object
           status:
             description: LeaseStatus defines the observed state of Lease

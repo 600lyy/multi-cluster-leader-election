@@ -31,11 +31,6 @@ type LeaseSpec struct {
 	// to wait to force acquire it. This is measure against time of last
 	// observed renewTime.
 	LeaseDurationSeconds int32 `json:"leaseDurationSeconds" protobuf:"varint,2,opt,name=leaseDurationSeconds"`
-	// acquireTime is a time when the current lease was acquired.
-	AcquireTime metav1.MicroTime `json:"acquireTime" protobuf:"bytes,3,opt,name=acquireTime"`
-	// renewTime is a time when the current holder of a lease has last
-	// updated the lease.
-	RenewTime metav1.MicroTime `json:"renewTime" protobuf:"bytes,4,opt,name=renewTime"`
 }
 
 // LeaseStatus defines the observed state of Lease
