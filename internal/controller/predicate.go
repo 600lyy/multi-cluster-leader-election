@@ -18,6 +18,7 @@ var (
 		"multi-cluster-leader-election-system": true,
 		"ssa-demo":                             true,
 		"kube-system":                          true,
+		"gke-managed-system":                   true,
 		"default":                              true,
 	}
 )

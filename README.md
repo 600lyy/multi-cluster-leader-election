@@ -13,12 +13,15 @@
 - Access to a Kubernetes v1.11.3+ cluster.
 
 ### GKE Workload Identify
+
+**Run these commands once per project**
 gcloud iam service-accounts create lease-controller-manager
 
 gcloud projects add-iam-policy-binding PROJECT_ID --member "serviceAccount:lease-controller-manager@PROJECT_ID.iam.gserviceaccount.com"  --role "roles/storage.admin"
 
 gcloud iam service-accounts add-iam-policy-binding  lease-controller-manager@PROJECT_ID.iam.gserviceaccount.com    --member="serviceAccount:PROJECT_ID.svc.id.goog[multi-cluster-leader-election-system/leader-election-controller-manager]"  --role="roles/iam.workloadIdentityUser"
 
+**Run this command once per cluster**
 kubectl annotate serviceaccount KSA_NAME \
     --namespace NAMESPACE \
     iam.gke.io/gcp-service-account=lease-controller-manager@GSA_PROJECT.iam.gserviceaccount.com

@@ -35,6 +35,8 @@ type LeaseSpec struct {
 
 // LeaseStatus defines the observed state of Lease
 type LeaseStatus struct {
+	//isLeader indicates if the current controller is leader or not
+	IsLeader bool `json:"isLeader" protobuf:"bytes,1,opt,name=isLeader"`
 	// observedholderIdentity contains the identity of the holder of a current lease.
 	ObservedHolderIdentity string `json:"observedHolderIdentity" protobuf:"bytes,1,opt,name=observedHolderIdentity"`
 	// observedAcquireTime is a time when the current lease was acquired.

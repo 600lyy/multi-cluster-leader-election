@@ -112,6 +112,7 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 		// update lease status
 		lease.Status = resourcelock.LeaderElectionRecordToLeaseStatus(&r.LeaderElector.ObservedRecord)
+		lease.Status.IsLeader = r.LeaderElector.IsLeader()
 		if err = r.Status().Update(ctx, lease); err != nil {
 			logger.Error(err, "unable to update lease status")
 			return ctrl.Result{}, err

@@ -51,6 +51,10 @@ spec:
           status:
             description: LeaseStatus defines the observed state of Lease
             properties:
+              isLeader:
+                description: isLeader indicates if the current controller is leader
+                  or not
+                type: boolean
               leaseTransitions:
                 description: leaseTransitions is the number of transitions of a lease
                   between holders.
@@ -66,6 +70,7 @@ spec:
                   of a current lease.
                 type: string
             required:
+            - isLeader
             - leaseTransitions
             - observedAcquireTime
             - observedHolderIdentity
