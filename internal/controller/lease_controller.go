@@ -121,7 +121,7 @@ func (r *LeaseReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl
 
 	// If no error, heading to the next reconcile
 	if reconcileReenqueuePeriod, err := jitter.GenerateJitterReenqueuePeriod(lease); err != nil {
-		logger.Error(err, "unable to requeue to trigger next reconcile")
+		logger.Error(err, "unable to requeue request to trigger next reconcile")
 		return ctrl.Result{}, err
 	} else {
 		logger.Info("successully finished reconcile", "ns", namespaceName, "lease", lease.Name, "time to next reconcile", reconcileReenqueuePeriod)

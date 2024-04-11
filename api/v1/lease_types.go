@@ -36,13 +36,17 @@ type LeaseSpec struct {
 // LeaseStatus defines the observed state of Lease
 type LeaseStatus struct {
 	//isLeader indicates if the current controller is leader or not
+	// +kubebuilder:default:=false
 	IsLeader bool `json:"isLeader" protobuf:"bytes,1,opt,name=isLeader"`
 	// observedholderIdentity contains the identity of the holder of a current lease.
 	ObservedHolderIdentity string `json:"observedHolderIdentity" protobuf:"bytes,1,opt,name=observedHolderIdentity"`
 	// observedAcquireTime is a time when the current lease was acquired.
 	ObservedAcquireTime metav1.MicroTime `json:"observedAcquireTime" protobuf:"bytes,3,opt,name=observedAcquireTime"`
+	// observedRenewTime is a time when the current lease was last renewed.
+	ObservedRenewTime metav1.MicroTime `json:"observedRenewTime" protobuf:"bytes,3,opt,name=observedRenewTime"`
 	// leaseTransitions is the number of transitions of a lease between
 	// holders.
+	// +kubebuilder:default:=0
 	LeaseTransitions int32 `json:"leaseTransitions" protobuf:"varint,5,opt,name=leaseTransitions"`
 }
 

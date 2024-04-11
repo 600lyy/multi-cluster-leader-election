@@ -52,10 +52,12 @@ spec:
             description: LeaseStatus defines the observed state of Lease
             properties:
               isLeader:
+                default: false
                 description: isLeader indicates if the current controller is leader
                   or not
                 type: boolean
               leaseTransitions:
+                default: 0
                 description: leaseTransitions is the number of transitions of a lease
                   between holders.
                 format: int32
@@ -69,11 +71,17 @@ spec:
                 description: observedholderIdentity contains the identity of the holder
                   of a current lease.
                 type: string
+              observedRenewTime:
+                description: observedRenewTime is a time when the current lease was
+                  last renewed.
+                format: date-time
+                type: string
             required:
             - isLeader
             - leaseTransitions
             - observedAcquireTime
             - observedHolderIdentity
+            - observedRenewTime
             type: object
         type: object
     served: true

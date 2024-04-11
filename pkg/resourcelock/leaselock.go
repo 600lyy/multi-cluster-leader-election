@@ -153,6 +153,7 @@ func LeaderElectionRecordToLeaseStatus(ler *LeaderElectionRecord) leaderelection
 	return leaderelectionv1.LeaseStatus{
 		ObservedHolderIdentity: ler.HolderIdentity,
 		ObservedAcquireTime:    metav1.MicroTime(ler.AcquireTime),
+		ObservedRenewTime:      metav1.MicroTime(ler.RenewTime),
 		LeaseTransitions:       int32(ler.LeaderTransitions),
 	}
 }
