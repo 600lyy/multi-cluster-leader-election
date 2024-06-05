@@ -60,6 +60,24 @@ func (r *GuestbookReconciler) Reconcile(ctx context.Context, req ctrl.Request) (
 	return ctrl.Result{}, nil
 }
 
+func (r *GuestbookReconciler) checkResourceLockBeforeActuation(ctx context.Context, namespaceName string) bool {
+	logger.Info("Checking who is the current leader before resource acutation for namespace", "ns", namespaceName)
+
+	lease := &leaderelectionv1.Lease{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: namespaceName, Name: leaseName}, lease)
+	if err != nil {
+		logger.Error(err, "unbale to fetch the resource lock for namespace", "ns", namespaceName)
+		return false
+	}
+
+	// Check lease object
+	if reflect.ValueOf(lease.Status).IsZero() {
+		return false
+	}
+
+	return lease.Status.IsLeader
+}
+
 ```
 
 ## Getting Started
